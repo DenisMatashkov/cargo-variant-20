@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 from xml.etree import ElementTree
 
 from src.dependency_graph import CargoSource, TestSource, build_graph
-from src.load_order import calculate_load_order
+from src.visualization import ascii_tree, save_visualization
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config.xml"
 
@@ -117,70 +117,24 @@ def collect_graph(values, config_path):
     )
 
 
-def package_label(node):
-    """Подписывает вершину именем и версией, если она есть."""
-    name, version = node
-    return f"{name}@{version}" if version else name
-
-
-def print_graph(graph):
-    """Печатает списки смежности в порядке обхода."""
-    if not graph:
-        print("Граф пуст: начальный пакет исключён фильтром.")
-        return
-
-    print("Граф зависимостей (BFS)")
-    for node, children in graph.items():
-        labels = ", ".join(map(package_label, children))
-        print(f"{package_label(node)} -> {labels or '—'}")
-
-
-def print_load_order(graph):
-    """Печатает порядок загрузки и сообщает, удалось ли его построить."""
-    if not graph:
-        print("Граф пуст: начальный пакет исключён фильтром.")
-        return True
-
-    root = next(iter(graph))
-    order, blocked = calculate_load_order(graph)
-    dependencies = [node for node in order if node != root]
-
-    print(f"Порядок загрузки зависимостей {package_label(root)}")
-    for number, node in enumerate(dependencies, start=1):
-        print(f"{number}. {package_label(node)}")
-
-    if blocked:
-        labels = ", ".join(map(package_label, blocked))
-        print(f"Из-за цикла порядок не определён для: {labels}")
-        return False
-
-    if not dependencies:
-        print("Зависимостей для загрузки нет.")
-    return True
-
-
 def main():
-    """Читает XML и выводит граф или порядок загрузки."""
-    parser = argparse.ArgumentParser(description="Граф зависимостей Cargo")
+    """Читает XML, сохраняет граф и при необходимости печатает дерево."""
+    parser = argparse.ArgumentParser(description="Визуализация Cargo")
     parser.add_argument("config", nargs="?", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument(
-        "--load-order",
-        action="store_true",
-        help="вывести порядок загрузки зависимостей",
-    )
     args = parser.parse_args()
 
     try:
-        graph = collect_graph(load_config(args.config), args.config)
+        values = load_config(args.config)
+        graph = collect_graph(values, args.config)
+        svg_path = args.config.parent / values["output"]
+        mermaid_path = save_visualization(graph, svg_path)
     except (OSError, ElementTree.ParseError, ValueError) as error:
         parser.exit(1, f"Ошибка: {error}\n")
 
-    if not args.load_order:
-        print_graph(graph)
-        return
-
-    if not print_load_order(graph):
-        parser.exit(1)
+    print(f"Mermaid: {mermaid_path}")
+    print(f"SVG: {svg_path}")
+    if values["ascii_tree"] == "true":
+        print(ascii_tree(graph))
 
 
 if __name__ == "__main__":
