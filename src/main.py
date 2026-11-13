@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from xml.etree import ElementTree
 
-from src.cargo_index import get_release
+from src.dependency_graph import CargoSource, TestSource, build_graph
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config.xml"
 
@@ -95,40 +95,57 @@ def load_config(path):
     return values
 
 
-def print_dependencies(package, version, dependencies):
-    """Печатает прямые зависимости с типом и требованием версии."""
-    print(f"Прямые зависимости {package} {version}")
-    if not dependencies:
-        print("Прямых зависимостей нет.")
+def collect_graph(values, config_path):
+    """Подключает нужный источник и запускает BFS."""
+    package = values["package"]
+    if values["test_mode"] == "true":
+        source = TestSource(config_path.parent / values["repository"])
+        source.check_package(package)
+        root = (package, "")
+    else:
+        source = CargoSource(values["repository"])
+        root = (package, values["version"])
+        root = (source.release(root)["name"], root[1])
+
+    return build_graph(
+        root,
+        source.requirements,
+        source.resolve,
+        int(values["max_depth"]),
+        values["filter_substring"],
+    )
+
+
+def package_label(node):
+    """Подписывает вершину именем и версией, если она есть."""
+    name, version = node
+    return f"{name}@{version}" if version else name
+
+
+def print_graph(graph):
+    """Печатает списки смежности в порядке обхода."""
+    if not graph:
+        print("Граф пуст: начальный пакет исключён фильтром.")
         return
 
-    for dependency in dependencies:
-        name = dependency.get("package") or dependency["name"]
-        flags = [dependency.get("kind") or "normal"]
-        if dependency.get("optional"):
-            flags.append("optional")
-        if dependency.get("target"):
-            flags.append(dependency["target"])
-        print(f"- {name} {dependency['req']} [{', '.join(flags)}]")
+    print("Граф зависимостей (BFS)")
+    for node, children in graph.items():
+        labels = ", ".join(map(package_label, children))
+        print(f"{package_label(node)} -> {labels or '—'}")
 
 
 def main():
-    """Читает настройки и выводит прямые зависимости из индекса."""
-    parser = argparse.ArgumentParser(description="Зависимости Cargo")
+    """Читает XML, строит граф и печатает результат."""
+    parser = argparse.ArgumentParser(description="Граф зависимостей Cargo")
     parser.add_argument("config", nargs="?", type=Path, default=DEFAULT_CONFIG)
     args = parser.parse_args()
 
     try:
-        values = load_config(args.config)
-        if values["test_mode"] == "true":
-            raise ValueError("test_mode: для этапа 2 укажите false")
-        package = values["package"]
-        version = values["version"]
-        release = get_release(values["repository"], package, version)
+        graph = collect_graph(load_config(args.config), args.config)
     except (OSError, ElementTree.ParseError, ValueError) as error:
         parser.exit(1, f"Ошибка: {error}\n")
 
-    print_dependencies(package, version, release["deps"])
+    print_graph(graph)
 
 
 if __name__ == "__main__":
