@@ -6,6 +6,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from xml.etree import ElementTree
 
+from src.cargo_index import get_release
+
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config.xml"
 
 NUMBER = r"(?:0|[1-9][0-9]*)"
@@ -93,19 +95,40 @@ def load_config(path):
     return values
 
 
+def print_dependencies(package, version, dependencies):
+    """Печатает прямые зависимости с типом и требованием версии."""
+    print(f"Прямые зависимости {package} {version}")
+    if not dependencies:
+        print("Прямых зависимостей нет.")
+        return
+
+    for dependency in dependencies:
+        name = dependency.get("package") or dependency["name"]
+        flags = [dependency.get("kind") or "normal"]
+        if dependency.get("optional"):
+            flags.append("optional")
+        if dependency.get("target"):
+            flags.append(dependency["target"])
+        print(f"- {name} {dependency['req']} [{', '.join(flags)}]")
+
+
 def main():
-    """Принимает путь к XML и выводит параметры первого этапа."""
-    parser = argparse.ArgumentParser(description="Конфигурация варианта 20")
+    """Читает настройки и выводит прямые зависимости из индекса."""
+    parser = argparse.ArgumentParser(description="Зависимости Cargo")
     parser.add_argument("config", nargs="?", type=Path, default=DEFAULT_CONFIG)
     args = parser.parse_args()
 
     try:
         values = load_config(args.config)
+        if values["test_mode"] == "true":
+            raise ValueError("test_mode: для этапа 2 укажите false")
+        package = values["package"]
+        version = values["version"]
+        release = get_release(values["repository"], package, version)
     except (OSError, ElementTree.ParseError, ValueError) as error:
         parser.exit(1, f"Ошибка: {error}\n")
 
-    for name in RULES:
-        print(f"{name} = {values[name]}")
+    print_dependencies(package, version, release["deps"])
 
 
 if __name__ == "__main__":
