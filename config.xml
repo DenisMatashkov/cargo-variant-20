@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+    <package>regex</package>
+    <repository>https://raw.githubusercontent.com/rust-lang/crates.io-index/master/</repository>
+    <test_mode>false</test_mode>
+    <version>1.11.1</version>
+    <output>graph.svg</output>
+    <ascii_tree>true</ascii_tree>
+    <max_depth>3</max_depth>
+    <filter_substring/>
+</config>
