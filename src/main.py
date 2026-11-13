@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from xml.etree import ElementTree
 
 from src.dependency_graph import CargoSource, TestSource, build_graph
+from src.load_order import calculate_load_order
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config.xml"
 
@@ -134,10 +135,39 @@ def print_graph(graph):
         print(f"{package_label(node)} -> {labels or '—'}")
 
 
+def print_load_order(graph):
+    """Печатает порядок загрузки и сообщает, удалось ли его построить."""
+    if not graph:
+        print("Граф пуст: начальный пакет исключён фильтром.")
+        return True
+
+    root = next(iter(graph))
+    order, blocked = calculate_load_order(graph)
+    dependencies = [node for node in order if node != root]
+
+    print(f"Порядок загрузки зависимостей {package_label(root)}")
+    for number, node in enumerate(dependencies, start=1):
+        print(f"{number}. {package_label(node)}")
+
+    if blocked:
+        labels = ", ".join(map(package_label, blocked))
+        print(f"Из-за цикла порядок не определён для: {labels}")
+        return False
+
+    if not dependencies:
+        print("Зависимостей для загрузки нет.")
+    return True
+
+
 def main():
-    """Читает XML, строит граф и печатает результат."""
+    """Читает XML и выводит граф или порядок загрузки."""
     parser = argparse.ArgumentParser(description="Граф зависимостей Cargo")
     parser.add_argument("config", nargs="?", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument(
+        "--load-order",
+        action="store_true",
+        help="вывести порядок загрузки зависимостей",
+    )
     args = parser.parse_args()
 
     try:
@@ -145,7 +175,12 @@ def main():
     except (OSError, ElementTree.ParseError, ValueError) as error:
         parser.exit(1, f"Ошибка: {error}\n")
 
-    print_graph(graph)
+    if not args.load_order:
+        print_graph(graph)
+        return
+
+    if not print_load_order(graph):
+        parser.exit(1)
 
 
 if __name__ == "__main__":
