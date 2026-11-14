@@ -11,19 +11,18 @@ from src.main import DEFAULT_CONFIG, load_config
 class ConfigTests(unittest.TestCase):
     """Проверяет оба режима и ошибочные значения."""
 
-    def setUp(self):
-        """Создаёт временный каталог для конфигураций."""
-        folder = tempfile.TemporaryDirectory()
-        self.addCleanup(folder.cleanup)
-        self.path = Path(folder.name) / "config.xml"
+    def load(self, *, fixture_name=None, **changes):
+        """Создаёт временный XML, задаёт значения и проверяет настройки."""
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "config.xml"
+            if fixture_name is not None:
+                (path.parent / fixture_name).touch()
 
-    def load(self, **changes):
-        """Подставляет тестовые значения и читает полученный XML."""
-        tree = ElementTree.parse(DEFAULT_CONFIG)
-        for name, value in changes.items():
-            tree.find(name).text = value
-        tree.write(self.path, encoding="utf-8")
-        return load_config(self.path)
+            tree = ElementTree.parse(DEFAULT_CONFIG)
+            for name, value in changes.items():
+                tree.find(name).text = value
+            tree.write(path, encoding="utf-8")
+            return load_config(path)
 
     def test_default_config(self):
         """Все восемь полей корректно читаются."""
@@ -54,12 +53,14 @@ class ConfigTests(unittest.TestCase):
 
     def test_local_repository(self):
         """Путь к тестовому файлу читается относительно XML."""
-        fixture = self.path.parent / "graph.txt"
-        fixture.touch()
+        fixture_name = "graph.txt"
         values = self.load(
-            package="A", test_mode="true", repository=fixture.name
+            fixture_name=fixture_name,
+            package="A",
+            test_mode="true",
+            repository=fixture_name,
         )
-        self.assertEqual(values["repository"], fixture.name)
+        self.assertEqual(values["repository"], fixture_name)
 
     def test_missing_local_repository(self):
         """Несуществующий тестовый файл вызывает ошибку."""

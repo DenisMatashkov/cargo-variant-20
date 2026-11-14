@@ -15,15 +15,12 @@ SVG_NAMESPACE = {"svg": "http://www.w3.org/2000/svg"}
 class VisualizationTests(unittest.TestCase):
     """Проверяет визуализацию общего узла, цикла и пустого графа."""
 
-    def setUp(self):
-        """Загружает граф с общим пакетом D и циклом D -> A."""
-        self.graph = collect_graph(load_config(CONFIG), CONFIG)
-
     def test_mermaid_and_svg(self):
         """Оба файла сохраняют пять вершин и шесть рёбер."""
+        graph = collect_graph(load_config(CONFIG), CONFIG)
         with tempfile.TemporaryDirectory() as folder:
             svg = Path(folder) / "graph.svg"
-            mermaid = save_visualization(self.graph, svg)
+            mermaid = save_visualization(graph, svg)
             content = mermaid.read_text(encoding="utf-8")
             self.assertTrue(content.startswith("flowchart TD\n"))
             self.assertEqual(content.count('["'), 5)
@@ -36,7 +33,8 @@ class VisualizationTests(unittest.TestCase):
 
     def test_ascii_tree(self):
         """Дерево показывает повторные A и D и завершает обход."""
-        lines = ascii_tree(self.graph).splitlines()
+        graph = collect_graph(load_config(CONFIG), CONFIG)
+        lines = ascii_tree(graph).splitlines()
         self.assertEqual(lines[0], "A")
         self.assertIn("A [repeat]", "\n".join(lines))
         self.assertIn("D [repeat]", "\n".join(lines))
